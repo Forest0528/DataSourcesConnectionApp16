@@ -5,6 +5,8 @@ VisualStudioVersion = 17.11.35327.3
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DataSourcesConnectionApp", "DataSourcesConnectionApp\DataSourcesConnectionApp.csproj", "{F4D3A90F-77C5-4946-9955-739112F6AF8A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OnlineStoreManager", "OnlineStoreManager\OnlineStoreManager.csproj", "{6A774904-ED4A-42E8-BB19-104AE6A27767}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{F4D3A90F-77C5-4946-9955-739112F6AF8A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F4D3A90F-77C5-4946-9955-739112F6AF8A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F4D3A90F-77C5-4946-9955-739112F6AF8A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6A774904-ED4A-42E8-BB19-104AE6A27767}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6A774904-ED4A-42E8-BB19-104AE6A27767}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6A774904-ED4A-42E8-BB19-104AE6A27767}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6A774904-ED4A-42E8-BB19-104AE6A27767}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

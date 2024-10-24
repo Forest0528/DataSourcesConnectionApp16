@@ -1,0 +1,29 @@
+﻿<Window x:Class="OnlineStoreManager.AddPurchaseWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Добавить покупку" Height="200" Width="400">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Поля ввода -->
+        <Label Content="Код товара:" Grid.Row="0" Grid.Column="0" Margin="5"/>
+        <TextBox x:Name="txtProductCode" Grid.Row="0" Grid.Column="1" Margin="5"/>
+
+        <Label Content="Наименование товара:" Grid.Row="1" Grid.Column="0" Margin="5"/>
+        <TextBox x:Name="txtProductName" Grid.Row="1" Grid.Column="1" Margin="5"/>
+
+        <!-- Кнопки -->
+        <StackPanel Orientation="Horizontal" Grid.Row="2" Grid.ColumnSpan="2" HorizontalAlignment="Right">
+            <Button Content="Сохранить" Click="btnSave_Click" Width="80" Margin="5"/>
+            <Button Content="Отмена" Click="btnCancel_Click" Width="80" Margin="5"/>
+        </StackPanel>
+    </Grid>
+</Window>
