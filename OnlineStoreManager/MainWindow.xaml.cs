@@ -6,14 +6,8 @@ using System.Data.SQLite;
 using System.Windows;
 using System.Windows.Controls;
 
-
-
-
 namespace OnlineStoreManager
 {
-    /// <summary>
-    /// Логика взаимодействия для MainWindow.xaml
-    /// </summary>
     public partial class MainWindow : Window
     {
         public MainWindow()
@@ -23,9 +17,7 @@ namespace OnlineStoreManager
         }
 
         string sqlConnectionString = @"Data Source=(LocalDB)\MSSQLLocalDB;Initial Catalog=OnlineStoreDB;Integrated Security=True;";
-
-        string sqliteConnectionString = @"Data Source=C:\Users\bv03a\Downloads\Purchases.db;Version=3;";
-
+        string sqliteConnectionString = @"Data Source=C:\Users\bv03a\Downloads\Purchases.db;Version=3;Busy Timeout=3000;";
 
         private void LoadCustomers()
         {
@@ -35,22 +27,20 @@ namespace OnlineStoreManager
                 {
                     sqlConnection.Open();
                     string query = "SELECT ID, LastName, FirstName, MiddleName, PhoneNumber, Email FROM [Customers]";
-
                     SqlCommand command = new SqlCommand(query, sqlConnection);
                     SqlDataReader reader = command.ExecuteReader();
 
                     var customers = new List<Customer>();
-
                     while (reader.Read())
                     {
                         customers.Add(new Customer
                         {
-                            ID = reader.GetInt32(0), // индекс 0 соответствует ID
-                            LastName = reader.GetString(1), // индекс 1 соответствует LastName
-                            FirstName = reader.GetString(2), // индекс 2 соответствует FirstName
-                            MiddleName = reader.IsDBNull(3) ? null : reader.GetString(3), // индекс 3 соответствует MiddleName
-                            PhoneNumber = reader.IsDBNull(4) ? null : reader.GetString(4), // индекс 4 соответствует PhoneNumber
-                            Email = reader.GetString(5) // индекс 5 соответствует Email
+                            ID = reader.GetInt32(0),
+                            LastName = reader.GetString(1),
+                            FirstName = reader.GetString(2),
+                            MiddleName = reader.IsDBNull(3) ? null : reader.GetString(3),
+                            PhoneNumber = reader.IsDBNull(4) ? null : reader.GetString(4),
+                            Email = reader.GetString(5)
                         });
                     }
 
@@ -60,10 +50,12 @@ namespace OnlineStoreManager
                 {
                     MessageBox.Show("Ошибка загрузки клиентов: " + ex.Message);
                 }
+                finally
+                {
+                    sqlConnection.Close();  // Закрываем соединение после выполнения
+                }
             }
         }
-
-
 
         private void LoadPurchases(string email)
         {
@@ -84,40 +76,38 @@ namespace OnlineStoreManager
                 {
                     MessageBox.Show("Ошибка загрузки покупок: " + ex.Message);
                 }
+                finally
+                {
+                    sqliteConnection.Close();  // Закрываем соединение после выполнения
+                }
             }
         }
 
-
         private void dataGridCustomers_Sorting(object sender, DataGridSortingEventArgs e)
         {
-            // Обновляем список клиентов при сортировке
-            LoadCustomers();
+            LoadCustomers();  // Обновляем список клиентов при сортировке
         }
 
         private void btnRefreshData_Click(object sender, RoutedEventArgs e)
         {
-            LoadCustomers(); // Обновляем клиентов
-            dataGridPurchases.ItemsSource = null; // Очищаем нижний DataGrid
+            LoadCustomers();  // Обновляем клиентов
+            dataGridPurchases.ItemsSource = null;  // Очищаем нижний DataGrid
         }
-
 
         private void dataGridCustomers_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (dataGridCustomers.SelectedItem is Customer selectedCustomer)
             {
                 string email = selectedCustomer.Email;
-                LoadPurchases(email); // Загружаем покупки для выбранного клиента
+                LoadPurchases(email);  // Загружаем покупки для выбранного клиента
             }
         }
 
-
         private void btnAddCustomer_Click(object sender, RoutedEventArgs e)
         {
-            // Откройте окно для ввода данных клиента или используйте поля ввода на форме
             AddCustomerWindow addCustomerWindow = new AddCustomerWindow();
             if (addCustomerWindow.ShowDialog() == true)
             {
-                // Получите данные из окна
                 string lastName = addCustomerWindow.LastName;
                 string firstName = addCustomerWindow.FirstName;
                 string middleName = addCustomerWindow.MiddleName;
@@ -144,6 +134,10 @@ namespace OnlineStoreManager
                     {
                         MessageBox.Show("Ошибка добавления клиента: " + ex.Message);
                     }
+                    finally
+                    {
+                        sqlConnection.Close();  // Закрываем соединение после выполнения
+                    }
                 }
             }
         }
@@ -152,11 +146,9 @@ namespace OnlineStoreManager
         {
             if (dataGridCustomers.SelectedItem != null)
             {
-                // Приводим выбранный элемент к типу Customer, а не DataRowView
                 Customer selectedCustomer = (Customer)dataGridCustomers.SelectedItem;
                 string email = selectedCustomer.Email;
 
-                // Открываем окно для ввода данных покупки
                 AddPurchaseWindow addPurchaseWindow = new AddPurchaseWindow();
                 if (addPurchaseWindow.ShowDialog() == true)
                 {
@@ -165,21 +157,31 @@ namespace OnlineStoreManager
 
                     using (SQLiteConnection sqliteConnection = new SQLiteConnection(sqliteConnectionString))
                     {
-                        try
+                        sqliteConnection.Open();
+                        using (var transaction = sqliteConnection.BeginTransaction())
                         {
-                            sqliteConnection.Open();
-                            string query = "INSERT INTO Purchases (Email, ProductCode, ProductName) VALUES (@Email, @ProductCode, @ProductName)";
-                            SQLiteCommand command = new SQLiteCommand(query, sqliteConnection);
-                            command.Parameters.AddWithValue("@Email", email);
-                            command.Parameters.AddWithValue("@ProductCode", productCode);
-                            command.Parameters.AddWithValue("@ProductName", productName);
-                            command.ExecuteNonQuery();
-                            MessageBox.Show("Покупка успешно добавлена.");
-                            LoadPurchases(email);  // Обновляем список покупок
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show("Ошибка добавления покупки: " + ex.Message);
+                            try
+                            {
+                                string query = "INSERT INTO Purchases (Email, ProductCode, ProductName) VALUES (@Email, @ProductCode, @ProductName)";
+                                SQLiteCommand command = new SQLiteCommand(query, sqliteConnection);
+                                command.Parameters.AddWithValue("@Email", email);
+                                command.Parameters.AddWithValue("@ProductCode", productCode);
+                                command.Parameters.AddWithValue("@ProductName", productName);
+                                command.ExecuteNonQuery();
+
+                                transaction.Commit();  // Коммит транзакции
+                                MessageBox.Show("Покупка успешно добавлена.");
+                                LoadPurchases(email);  // Обновляем список покупок
+                            }
+                            catch (Exception ex)
+                            {
+                                transaction.Rollback();  // Откат транзакции при ошибке
+                                MessageBox.Show("Ошибка добавления покупки: " + ex.Message);
+                            }
+                            finally
+                            {
+                                sqliteConnection.Close();  // Закрываем соединение после выполнения
+                            }
                         }
                     }
                 }
@@ -190,12 +192,10 @@ namespace OnlineStoreManager
             }
         }
 
-
         private void btnUpdateCustomer_Click(object sender, RoutedEventArgs e)
         {
             if (dataGridCustomers.SelectedItem != null)
             {
-                // Приводим выбранный элемент к типу Customer, так как в dataGrid мы привязали список объектов Customer
                 Customer selectedCustomer = (Customer)dataGridCustomers.SelectedItem;
 
                 int id = selectedCustomer.ID;
@@ -205,7 +205,6 @@ namespace OnlineStoreManager
                 string phoneNumber = selectedCustomer.PhoneNumber;
                 string email = selectedCustomer.Email;
 
-                // Открываем окно для редактирования данных клиента
                 EditCustomerWindow editCustomerWindow = new EditCustomerWindow(lastName, firstName, middleName, phoneNumber, email);
                 if (editCustomerWindow.ShowDialog() == true)
                 {
@@ -236,6 +235,10 @@ namespace OnlineStoreManager
                         {
                             MessageBox.Show("Ошибка обновления клиента: " + ex.Message);
                         }
+                        finally
+                        {
+                            sqlConnection.Close();  // Закрываем соединение после выполнения
+                        }
                     }
                 }
             }
@@ -245,13 +248,11 @@ namespace OnlineStoreManager
             }
         }
 
-
         private void btnClearData_Click(object sender, RoutedEventArgs e)
         {
             MessageBoxResult result = MessageBox.Show("Вы уверены, что хотите удалить все данные?", "Подтверждение", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (result == MessageBoxResult.Yes)
             {
-                // Удаляем данные из таблицы Purchases
                 using (SQLiteConnection sqliteConnection = new SQLiteConnection(sqliteConnectionString))
                 {
                     try
@@ -265,9 +266,12 @@ namespace OnlineStoreManager
                     {
                         MessageBox.Show("Ошибка очистки данных в SQLite: " + ex.Message);
                     }
+                    finally
+                    {
+                        sqliteConnection.Close();  // Закрываем соединение после выполнения
+                    }
                 }
 
-                // Удаляем данные из таблицы Customers
                 using (SqlConnection sqlConnection = new SqlConnection(sqlConnectionString))
                 {
                     try
@@ -283,6 +287,10 @@ namespace OnlineStoreManager
                     {
                         MessageBox.Show("Ошибка очистки данных в MSSQLLocalDB: " + ex.Message);
                     }
+                    finally
+                    {
+                        sqlConnection.Close();  // Закрываем соединение после выполнения
+                    }
                 }
             }
         }
@@ -291,7 +299,6 @@ namespace OnlineStoreManager
         {
             if (dataGridCustomers.SelectedItem != null)
             {
-                // Приводим выбранный элемент к типу Customer
                 Customer selectedCustomer = (Customer)dataGridCustomers.SelectedItem;
 
                 int id = selectedCustomer.ID;
@@ -311,11 +318,15 @@ namespace OnlineStoreManager
 
                             MessageBox.Show("Клиент успешно удален.");
                             LoadCustomers();  // Обновляем список клиентов после удаления
-                            dataGridPurchases.ItemsSource = null; // Очистить покупки после удаления клиента
+                            dataGridPurchases.ItemsSource = null;  // Очистить покупки после удаления клиента
                         }
                         catch (Exception ex)
                         {
                             MessageBox.Show("Ошибка удаления клиента: " + ex.Message);
+                        }
+                        finally
+                        {
+                            sqlConnection.Close();  // Закрываем соединение после выполнения
                         }
                     }
                 }
