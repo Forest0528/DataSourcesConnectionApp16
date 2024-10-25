@@ -1,9 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Data;
-using System.Data.SqlClient;  // Для MSSQLLocalDB
-using System.Data.SQLite; // Для SQLite
+using System.Data.SqlClient;
+using System.Data.SQLite;
 using System.Windows;
-using System.Windows.Controls; // Добавлено пространство имен
+using System.Windows.Controls;
 
 
 
@@ -18,12 +19,12 @@ namespace OnlineStoreManager
         public MainWindow()
         {
             InitializeComponent();
-            LoadCustomers(); // Добавьте этот вызов
+            LoadCustomers();
         }
 
         string sqlConnectionString = @"Data Source=(LocalDB)\MSSQLLocalDB;Initial Catalog=OnlineStoreDB;Integrated Security=True;";
 
-        string sqliteConnectionString = @"Data Source=|DataDirectory|\Purchases.sqlite;Version=3;";
+        string sqliteConnectionString = @"Data Source=C:\Users\bv03a\Downloads\Purchases.db;Version=3;";
 
 
         private void LoadCustomers()
@@ -33,10 +34,27 @@ namespace OnlineStoreManager
                 try
                 {
                     sqlConnection.Open();
-                    SqlDataAdapter adapter = new SqlDataAdapter("SELECT * FROM Customers", sqlConnection);
-                    DataTable customersTable = new DataTable();
-                    adapter.Fill(customersTable);
-                    dataGridCustomers.ItemsSource = customersTable.DefaultView;
+                    string query = "SELECT ID, LastName, FirstName, MiddleName, PhoneNumber, Email FROM [Customers]";
+
+                    SqlCommand command = new SqlCommand(query, sqlConnection);
+                    SqlDataReader reader = command.ExecuteReader();
+
+                    var customers = new List<Customer>();
+
+                    while (reader.Read())
+                    {
+                        customers.Add(new Customer
+                        {
+                            ID = reader.GetInt32(0), // индекс 0 соответствует ID
+                            LastName = reader.GetString(1), // индекс 1 соответствует LastName
+                            FirstName = reader.GetString(2), // индекс 2 соответствует FirstName
+                            MiddleName = reader.IsDBNull(3) ? null : reader.GetString(3), // индекс 3 соответствует MiddleName
+                            PhoneNumber = reader.IsDBNull(4) ? null : reader.GetString(4), // индекс 4 соответствует PhoneNumber
+                            Email = reader.GetString(5) // индекс 5 соответствует Email
+                        });
+                    }
+
+                    dataGridCustomers.ItemsSource = customers;
                 }
                 catch (Exception ex)
                 {
@@ -44,6 +62,8 @@ namespace OnlineStoreManager
                 }
             }
         }
+
+
 
         private void LoadPurchases(string email)
         {
@@ -67,15 +87,30 @@ namespace OnlineStoreManager
             }
         }
 
+
+        private void dataGridCustomers_Sorting(object sender, DataGridSortingEventArgs e)
+        {
+            // Обновляем список клиентов при сортировке
+            LoadCustomers();
+        }
+
+        private void btnRefreshData_Click(object sender, RoutedEventArgs e)
+        {
+            LoadCustomers(); // Обновляем клиентов
+            dataGridPurchases.ItemsSource = null; // Очищаем нижний DataGrid
+        }
+
+
         private void dataGridCustomers_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (dataGridCustomers.SelectedItem != null)
+            if (dataGridCustomers.SelectedItem is Customer selectedCustomer)
             {
-                DataRowView row = (DataRowView)dataGridCustomers.SelectedItem;
-                string email = row["Email"].ToString();
-                LoadPurchases(email);
+                string email = selectedCustomer.Email;
+                LoadPurchases(email); // Загружаем покупки для выбранного клиента
             }
         }
+
+
         private void btnAddCustomer_Click(object sender, RoutedEventArgs e)
         {
             // Откройте окно для ввода данных клиента или используйте поля ввода на форме
@@ -117,10 +152,11 @@ namespace OnlineStoreManager
         {
             if (dataGridCustomers.SelectedItem != null)
             {
-                DataRowView customerRow = (DataRowView)dataGridCustomers.SelectedItem;
-                string email = customerRow["Email"].ToString();
+                // Приводим выбранный элемент к типу Customer, а не DataRowView
+                Customer selectedCustomer = (Customer)dataGridCustomers.SelectedItem;
+                string email = selectedCustomer.Email;
 
-                // Откройте окно для ввода данных покупки
+                // Открываем окно для ввода данных покупки
                 AddPurchaseWindow addPurchaseWindow = new AddPurchaseWindow();
                 if (addPurchaseWindow.ShowDialog() == true)
                 {
@@ -139,7 +175,7 @@ namespace OnlineStoreManager
                             command.Parameters.AddWithValue("@ProductName", productName);
                             command.ExecuteNonQuery();
                             MessageBox.Show("Покупка успешно добавлена.");
-                            LoadPurchases(email);
+                            LoadPurchases(email);  // Обновляем список покупок
                         }
                         catch (Exception ex)
                         {
@@ -154,21 +190,22 @@ namespace OnlineStoreManager
             }
         }
 
+
         private void btnUpdateCustomer_Click(object sender, RoutedEventArgs e)
         {
             if (dataGridCustomers.SelectedItem != null)
             {
-                DataRowView row = (DataRowView)dataGridCustomers.SelectedItem;
-                int id = Convert.ToInt32(row["ID"]);
-                string lastName = row["LastName"].ToString();
-                string firstName = row["FirstName"].ToString();
-                string middleName = row["MiddleName"].ToString();
-                string phoneNumber = row["PhoneNumber"].ToString();
-                string email = row["Email"].ToString();
+                // Приводим выбранный элемент к типу Customer, так как в dataGrid мы привязали список объектов Customer
+                Customer selectedCustomer = (Customer)dataGridCustomers.SelectedItem;
 
+                int id = selectedCustomer.ID;
+                string lastName = selectedCustomer.LastName;
+                string firstName = selectedCustomer.FirstName;
+                string middleName = selectedCustomer.MiddleName;
+                string phoneNumber = selectedCustomer.PhoneNumber;
+                string email = selectedCustomer.Email;
 
-
-                // Откройте окно для редактирования данных клиента
+                // Открываем окно для редактирования данных клиента
                 EditCustomerWindow editCustomerWindow = new EditCustomerWindow(lastName, firstName, middleName, phoneNumber, email);
                 if (editCustomerWindow.ShowDialog() == true)
                 {
@@ -207,6 +244,7 @@ namespace OnlineStoreManager
                 MessageBox.Show("Пожалуйста, выберите клиента.");
             }
         }
+
 
         private void btnClearData_Click(object sender, RoutedEventArgs e)
         {
@@ -253,8 +291,10 @@ namespace OnlineStoreManager
         {
             if (dataGridCustomers.SelectedItem != null)
             {
-                DataRowView row = (DataRowView)dataGridCustomers.SelectedItem;
-                int id = Convert.ToInt32(row["ID"]);
+                // Приводим выбранный элемент к типу Customer
+                Customer selectedCustomer = (Customer)dataGridCustomers.SelectedItem;
+
+                int id = selectedCustomer.ID;
 
                 MessageBoxResult result = MessageBox.Show("Вы уверены, что хотите удалить выбранного клиента?", "Подтверждение", MessageBoxButton.YesNo, MessageBoxImage.Warning);
                 if (result == MessageBoxResult.Yes)
@@ -270,8 +310,8 @@ namespace OnlineStoreManager
                             command.ExecuteNonQuery();
 
                             MessageBox.Show("Клиент успешно удален.");
-                            LoadCustomers();
-                            dataGridPurchases.ItemsSource = null; // Очистить покупки
+                            LoadCustomers();  // Обновляем список клиентов после удаления
+                            dataGridPurchases.ItemsSource = null; // Очистить покупки после удаления клиента
                         }
                         catch (Exception ex)
                         {
@@ -285,9 +325,5 @@ namespace OnlineStoreManager
                 MessageBox.Show("Пожалуйста, выберите клиента для удаления.");
             }
         }
-
-
-
-
     }
 }
