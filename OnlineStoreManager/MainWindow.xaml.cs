@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
@@ -10,330 +11,333 @@ namespace OnlineStoreManager
 {
     public partial class MainWindow : Window
     {
-        public MainWindow()
+        private readonly string sqlConnectionString = @"Data Source=(LocalDB)\MSSQLLocalDB;Initial Catalog=OnlineStoreDB;Integrated Security=True;";
+        private readonly string sqliteConnectionString = @"Data Source=C:\Users\bv03a\Downloads\Purchases.db;Version=3;Busy Timeout=3000;";
+        private readonly ICustomerRepository _customerRepository;
+        public MainWindow() : this(new CustomerRepository(new OnlineStoreContext(new DbContextOptions<OnlineStoreContext>())))
+        {
+        }
+
+        public MainWindow(ICustomerRepository customerRepository)
         {
             InitializeComponent();
+            _customerRepository = customerRepository;
             LoadCustomers();
         }
 
-        string sqlConnectionString = @"Data Source=(LocalDB)\MSSQLLocalDB;Initial Catalog=OnlineStoreDB;Integrated Security=True;";
-        string sqliteConnectionString = @"Data Source=C:\Users\bv03a\Downloads\Purchases.db;Version=3;Busy Timeout=3000;";
 
-        private void LoadCustomers()
+        // Универсальный метод для выполнения SQL-запросов
+        private void ExecuteSql(Action<SqlConnection> action)
         {
             using (SqlConnection sqlConnection = new SqlConnection(sqlConnectionString))
             {
                 try
                 {
                     sqlConnection.Open();
-                    string query = "SELECT ID, LastName, FirstName, MiddleName, PhoneNumber, Email FROM [Customers]";
-                    SqlCommand command = new SqlCommand(query, sqlConnection);
-                    SqlDataReader reader = command.ExecuteReader();
-
-                    var customers = new List<Customer>();
-                    while (reader.Read())
-                    {
-                        customers.Add(new Customer
-                        {
-                            ID = reader.GetInt32(0),
-                            LastName = reader.GetString(1),
-                            FirstName = reader.GetString(2),
-                            MiddleName = reader.IsDBNull(3) ? null : reader.GetString(3),
-                            PhoneNumber = reader.IsDBNull(4) ? null : reader.GetString(4),
-                            Email = reader.GetString(5)
-                        });
-                    }
-
-                    dataGridCustomers.ItemsSource = customers;
+                    action(sqlConnection);
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show("Ошибка загрузки клиентов: " + ex.Message);
-                }
-                finally
-                {
-                    sqlConnection.Close();  // Закрываем соединение после выполнения
+                    MessageBox.Show("Ошибка: " + ex.Message);
                 }
             }
         }
 
-        private void LoadPurchases(string email)
+        // Универсальный метод для выполнения SQLite-запросов
+        private void ExecuteSQLite(Action<SQLiteConnection> action)
         {
             using (SQLiteConnection sqliteConnection = new SQLiteConnection(sqliteConnectionString))
             {
                 try
                 {
                     sqliteConnection.Open();
-                    string query = "SELECT * FROM Purchases WHERE Email = @Email";
-                    SQLiteCommand command = new SQLiteCommand(query, sqliteConnection);
-                    command.Parameters.AddWithValue("@Email", email);
-                    SQLiteDataAdapter adapter = new SQLiteDataAdapter(command);
-                    DataTable purchasesTable = new DataTable();
-                    adapter.Fill(purchasesTable);
-                    dataGridPurchases.ItemsSource = purchasesTable.DefaultView;
+                    action(sqliteConnection);
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show("Ошибка загрузки покупок: " + ex.Message);
-                }
-                finally
-                {
-                    sqliteConnection.Close();  // Закрываем соединение после выполнения
+                    MessageBox.Show("Ошибка: " + ex.Message);
                 }
             }
         }
 
-        private void dataGridCustomers_Sorting(object sender, DataGridSortingEventArgs e)
+        private void LoadCustomers()
         {
-            LoadCustomers();  // Обновляем список клиентов при сортировке
+            dataGridCustomers.ItemsSource = _customerRepository.GetAllCustomers();
         }
+
+        //private void LoadCustomers()
+        //{
+        //    ExecuteSql(sqlConnection =>
+        //    {
+        //        string query = "SELECT ID, LastName, FirstName, MiddleName, PhoneNumber, Email FROM [Customers]";
+        //        SqlCommand command = new SqlCommand(query, sqlConnection);
+        //        SqlDataReader reader = command.ExecuteReader();
+
+        //        var customers = new List<Customer>();
+        //        while (reader.Read())
+        //        {
+        //            customers.Add(new Customer
+        //            {
+        //                ID = reader.GetInt32(0),
+        //                LastName = reader.GetString(1),
+        //                FirstName = reader.GetString(2),
+        //                MiddleName = reader.IsDBNull(3) ? null : reader.GetString(3),
+        //                PhoneNumber = reader.IsDBNull(4) ? null : reader.GetString(4),
+        //                Email = reader.GetString(5)
+        //            });
+        //        }
+
+        //        dataGridCustomers.ItemsSource = customers;
+        //    });
+        //}
+
+        private void LoadPurchases(string email)
+        {
+            ExecuteSQLite(sqliteConnection =>
+            {
+                string query = "SELECT * FROM Purchases WHERE Email = @Email";
+                SQLiteCommand command = new SQLiteCommand(query, sqliteConnection);
+                command.Parameters.AddWithValue("@Email", email);
+                SQLiteDataAdapter adapter = new SQLiteDataAdapter(command);
+                DataTable purchasesTable = new DataTable();
+                adapter.Fill(purchasesTable);
+                dataGridPurchases.ItemsSource = purchasesTable.DefaultView;
+            });
+        }
+
+        private void AddOrUpdateCustomer(bool isUpdate, Customer customer)
+        {
+            ExecuteSql(sqlConnection =>
+            {
+                string query = isUpdate
+                    ? "UPDATE Customers SET LastName = @LastName, FirstName = @FirstName, MiddleName = @MiddleName, PhoneNumber = @PhoneNumber, Email = @Email WHERE ID = @ID"
+                    : "INSERT INTO Customers (LastName, FirstName, MiddleName, PhoneNumber, Email) VALUES (@LastName, @FirstName, @MiddleName, @PhoneNumber, @Email)";
+
+                SqlCommand command = new SqlCommand(query, sqlConnection);
+                command.Parameters.AddWithValue("@LastName", customer.LastName);
+                command.Parameters.AddWithValue("@FirstName", customer.FirstName);
+                command.Parameters.AddWithValue("@MiddleName", customer.MiddleName);
+                command.Parameters.AddWithValue("@PhoneNumber", customer.PhoneNumber);
+                command.Parameters.AddWithValue("@Email", customer.Email);
+
+                if (isUpdate)
+                {
+                    command.Parameters.AddWithValue("@ID", customer.ID);
+                }
+
+                command.ExecuteNonQuery();
+                MessageBox.Show(isUpdate ? "Клиент обновлен." : "Клиент добавлен.");
+                LoadCustomers();
+            });
+        }
+
+        private void AddPurchase(string email, int productCode, string productName)
+        {
+            ExecuteSQLite(sqliteConnection =>
+            {
+                using (var transaction = sqliteConnection.BeginTransaction())
+                {
+                    try
+                    {
+                        string query = "INSERT INTO Purchases (Email, ProductCode, ProductName) VALUES (@Email, @ProductCode, @ProductName)";
+                        SQLiteCommand command = new SQLiteCommand(query, sqliteConnection);
+                        command.Parameters.AddWithValue("@Email", email);
+                        command.Parameters.AddWithValue("@ProductCode", productCode);
+                        command.Parameters.AddWithValue("@ProductName", productName);
+                        command.ExecuteNonQuery();
+
+                        transaction.Commit();
+                        MessageBox.Show("Покупка добавлена.");
+                        LoadPurchases(email);
+                    }
+                    catch (Exception ex)
+                    {
+                        transaction.Rollback();
+                        MessageBox.Show("Ошибка добавления покупки: " + ex.Message);
+                    }
+                }
+            });
+        }
+
+        private void ClearData()
+        {
+            ExecuteSql(sqlConnection =>
+            {
+                SqlCommand command = new SqlCommand("DELETE FROM Customers", sqlConnection);
+                command.ExecuteNonQuery();
+            });
+
+            ExecuteSQLite(sqliteConnection =>
+            {
+                SQLiteCommand command = new SQLiteCommand("DELETE FROM Purchases", sqliteConnection);
+                command.ExecuteNonQuery();
+            });
+
+            MessageBox.Show("Все данные удалены.");
+            LoadCustomers();
+        }
+
+        private void DeleteCustomer(int customerId)
+        {
+            ExecuteSql(sqlConnection =>
+            {
+                SqlCommand command = new SqlCommand("DELETE FROM Customers WHERE ID = @ID", sqlConnection);
+                command.Parameters.AddWithValue("@ID", customerId);
+                command.ExecuteNonQuery();
+            });
+
+            MessageBox.Show("Клиент удалён.");
+            LoadCustomers();
+            dataGridPurchases.ItemsSource = null;
+        }
+
+        private void dataGridCustomers_Sorting(object sender, DataGridSortingEventArgs e) => LoadCustomers();
 
         private void btnRefreshData_Click(object sender, RoutedEventArgs e)
         {
-            LoadCustomers();  // Обновляем клиентов
-            dataGridPurchases.ItemsSource = null;  // Очищаем нижний DataGrid
+            LoadCustomers();
+            dataGridPurchases.ItemsSource = null;
         }
 
         private void dataGridCustomers_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (dataGridCustomers.SelectedItem is Customer selectedCustomer)
             {
-                string email = selectedCustomer.Email;
-                LoadPurchases(email);  // Загружаем покупки для выбранного клиента
+                LoadPurchases(selectedCustomer.Email);
             }
         }
 
+        //private void btnAddCustomer_Click(object sender, RoutedEventArgs e)
+        //{
+        //    AddCustomerWindow addCustomerWindow = new AddCustomerWindow();
+        //    if (addCustomerWindow.ShowDialog() == true)
+        //    {
+        //        AddOrUpdateCustomer(false, new Customer
+        //        {
+        //            LastName = addCustomerWindow.LastName,
+        //            FirstName = addCustomerWindow.FirstName,
+        //            MiddleName = addCustomerWindow.MiddleName,
+        //            PhoneNumber = addCustomerWindow.PhoneNumber,
+        //            Email = addCustomerWindow.Email
+        //        });
+        //    }
+        //}
         private void btnAddCustomer_Click(object sender, RoutedEventArgs e)
         {
             AddCustomerWindow addCustomerWindow = new AddCustomerWindow();
             if (addCustomerWindow.ShowDialog() == true)
             {
-                string lastName = addCustomerWindow.LastName;
-                string firstName = addCustomerWindow.FirstName;
-                string middleName = addCustomerWindow.MiddleName;
-                string phoneNumber = addCustomerWindow.PhoneNumber;
-                string email = addCustomerWindow.Email;
-
-                using (SqlConnection sqlConnection = new SqlConnection(sqlConnectionString))
+                _customerRepository.AddCustomer(new Customer
                 {
-                    try
-                    {
-                        sqlConnection.Open();
-                        string query = "INSERT INTO Customers (LastName, FirstName, MiddleName, PhoneNumber, Email) VALUES (@LastName, @FirstName, @MiddleName, @PhoneNumber, @Email)";
-                        SqlCommand command = new SqlCommand(query, sqlConnection);
-                        command.Parameters.AddWithValue("@LastName", lastName);
-                        command.Parameters.AddWithValue("@FirstName", firstName);
-                        command.Parameters.AddWithValue("@MiddleName", middleName);
-                        command.Parameters.AddWithValue("@PhoneNumber", phoneNumber);
-                        command.Parameters.AddWithValue("@Email", email);
-                        command.ExecuteNonQuery();
-                        MessageBox.Show("Клиент успешно добавлен.");
-                        LoadCustomers();
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show("Ошибка добавления клиента: " + ex.Message);
-                    }
-                    finally
-                    {
-                        sqlConnection.Close();  // Закрываем соединение после выполнения
-                    }
+                    LastName = addCustomerWindow.LastName,
+                    FirstName = addCustomerWindow.FirstName,
+                    MiddleName = addCustomerWindow.MiddleName,
+                    PhoneNumber = addCustomerWindow.PhoneNumber,
+                    Email = addCustomerWindow.Email
+                });
+                LoadCustomers();
+            }
+        }
+
+        //private void btnUpdateCustomer_Click(object sender, RoutedEventArgs e)
+        //{
+        //    if (dataGridCustomers.SelectedItem is Customer selectedCustomer)
+        //    {
+        //        EditCustomerWindow editCustomerWindow = new EditCustomerWindow(selectedCustomer.LastName, selectedCustomer.FirstName, selectedCustomer.MiddleName, selectedCustomer.PhoneNumber, selectedCustomer.Email);
+        //        if (editCustomerWindow.ShowDialog() == true)
+        //        {
+        //            selectedCustomer.LastName = editCustomerWindow.LastName;
+        //            selectedCustomer.FirstName = editCustomerWindow.FirstName;
+        //            selectedCustomer.MiddleName = editCustomerWindow.MiddleName;
+        //            selectedCustomer.PhoneNumber = editCustomerWindow.PhoneNumber;
+        //            selectedCustomer.Email = editCustomerWindow.Email;
+
+        //            AddOrUpdateCustomer(true, selectedCustomer);
+        //        }
+        //    }
+        //}
+        private void btnUpdateCustomer_Click(object sender, RoutedEventArgs e)
+        {
+            if (dataGridCustomers.SelectedItem is Customer selectedCustomer)
+            {
+                EditCustomerWindow editCustomerWindow = new EditCustomerWindow(
+                    selectedCustomer.LastName, selectedCustomer.FirstName,
+                    selectedCustomer.MiddleName, selectedCustomer.PhoneNumber,
+                    selectedCustomer.Email);
+
+                if (editCustomerWindow.ShowDialog() == true)
+                {
+                    selectedCustomer.LastName = editCustomerWindow.LastName;
+                    selectedCustomer.FirstName = editCustomerWindow.FirstName;
+                    selectedCustomer.MiddleName = editCustomerWindow.MiddleName;
+                    selectedCustomer.PhoneNumber = editCustomerWindow.PhoneNumber;
+                    selectedCustomer.Email = editCustomerWindow.Email;
+
+                    _customerRepository.UpdateCustomer(selectedCustomer);
+                    LoadCustomers();
                 }
             }
         }
 
         private void btnAddPurchase_Click(object sender, RoutedEventArgs e)
         {
-            if (dataGridCustomers.SelectedItem != null)
+            if (dataGridCustomers.SelectedItem is Customer selectedCustomer)
             {
-                Customer selectedCustomer = (Customer)dataGridCustomers.SelectedItem;
-                string email = selectedCustomer.Email;
-
                 AddPurchaseWindow addPurchaseWindow = new AddPurchaseWindow();
                 if (addPurchaseWindow.ShowDialog() == true)
                 {
-                    int productCode = addPurchaseWindow.ProductCode;
-                    string productName = addPurchaseWindow.ProductName;
-
-                    using (SQLiteConnection sqliteConnection = new SQLiteConnection(sqliteConnectionString))
-                    {
-                        sqliteConnection.Open();
-                        using (var transaction = sqliteConnection.BeginTransaction())
-                        {
-                            try
-                            {
-                                string query = "INSERT INTO Purchases (Email, ProductCode, ProductName) VALUES (@Email, @ProductCode, @ProductName)";
-                                SQLiteCommand command = new SQLiteCommand(query, sqliteConnection);
-                                command.Parameters.AddWithValue("@Email", email);
-                                command.Parameters.AddWithValue("@ProductCode", productCode);
-                                command.Parameters.AddWithValue("@ProductName", productName);
-                                command.ExecuteNonQuery();
-
-                                transaction.Commit();  // Коммит транзакции
-                                MessageBox.Show("Покупка успешно добавлена.");
-                                LoadPurchases(email);  // Обновляем список покупок
-                            }
-                            catch (Exception ex)
-                            {
-                                transaction.Rollback();  // Откат транзакции при ошибке
-                                MessageBox.Show("Ошибка добавления покупки: " + ex.Message);
-                            }
-                            finally
-                            {
-                                sqliteConnection.Close();  // Закрываем соединение после выполнения
-                            }
-                        }
-                    }
+                    AddPurchase(selectedCustomer.Email, addPurchaseWindow.ProductCode, addPurchaseWindow.ProductName);
                 }
             }
             else
             {
-                MessageBox.Show("Пожалуйста, выберите клиента.");
+                MessageBox.Show("Выберите клиента.");
             }
         }
 
-        private void btnUpdateCustomer_Click(object sender, RoutedEventArgs e)
-        {
-            if (dataGridCustomers.SelectedItem != null)
-            {
-                Customer selectedCustomer = (Customer)dataGridCustomers.SelectedItem;
-
-                int id = selectedCustomer.ID;
-                string lastName = selectedCustomer.LastName;
-                string firstName = selectedCustomer.FirstName;
-                string middleName = selectedCustomer.MiddleName;
-                string phoneNumber = selectedCustomer.PhoneNumber;
-                string email = selectedCustomer.Email;
-
-                EditCustomerWindow editCustomerWindow = new EditCustomerWindow(lastName, firstName, middleName, phoneNumber, email);
-                if (editCustomerWindow.ShowDialog() == true)
-                {
-                    lastName = editCustomerWindow.LastName;
-                    firstName = editCustomerWindow.FirstName;
-                    middleName = editCustomerWindow.MiddleName;
-                    phoneNumber = editCustomerWindow.PhoneNumber;
-                    email = editCustomerWindow.Email;
-
-                    using (SqlConnection sqlConnection = new SqlConnection(sqlConnectionString))
-                    {
-                        try
-                        {
-                            sqlConnection.Open();
-                            string query = "UPDATE Customers SET LastName = @LastName, FirstName = @FirstName, MiddleName = @MiddleName, PhoneNumber = @PhoneNumber, Email = @Email WHERE ID = @ID";
-                            SqlCommand command = new SqlCommand(query, sqlConnection);
-                            command.Parameters.AddWithValue("@LastName", lastName);
-                            command.Parameters.AddWithValue("@FirstName", firstName);
-                            command.Parameters.AddWithValue("@MiddleName", middleName);
-                            command.Parameters.AddWithValue("@PhoneNumber", phoneNumber);
-                            command.Parameters.AddWithValue("@Email", email);
-                            command.Parameters.AddWithValue("@ID", id);
-                            command.ExecuteNonQuery();
-                            MessageBox.Show("Данные клиента обновлены.");
-                            LoadCustomers();
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show("Ошибка обновления клиента: " + ex.Message);
-                        }
-                        finally
-                        {
-                            sqlConnection.Close();  // Закрываем соединение после выполнения
-                        }
-                    }
-                }
-            }
-            else
-            {
-                MessageBox.Show("Пожалуйста, выберите клиента.");
-            }
-        }
+        //private void btnClearData_Click(object sender, RoutedEventArgs e)
+        //{
+        //    if (MessageBox.Show("Удалить все данные?", "Подтверждение", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+        //    {
+        //        ClearData();
+        //    }
+        //}
 
         private void btnClearData_Click(object sender, RoutedEventArgs e)
         {
-            MessageBoxResult result = MessageBox.Show("Вы уверены, что хотите удалить все данные?", "Подтверждение", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-            if (result == MessageBoxResult.Yes)
+            if (MessageBox.Show("Удалить все данные?", "Подтверждение", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
             {
-                using (SQLiteConnection sqliteConnection = new SQLiteConnection(sqliteConnectionString))
-                {
-                    try
-                    {
-                        sqliteConnection.Open();
-                        string query = "DELETE FROM Purchases";
-                        SQLiteCommand command = new SQLiteCommand(query, sqliteConnection);
-                        command.ExecuteNonQuery();
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show("Ошибка очистки данных в SQLite: " + ex.Message);
-                    }
-                    finally
-                    {
-                        sqliteConnection.Close();  // Закрываем соединение после выполнения
-                    }
-                }
-
-                using (SqlConnection sqlConnection = new SqlConnection(sqlConnectionString))
-                {
-                    try
-                    {
-                        sqlConnection.Open();
-                        string query = "DELETE FROM Customers";
-                        SqlCommand command = new SqlCommand(query, sqlConnection);
-                        command.ExecuteNonQuery();
-                        MessageBox.Show("Все данные удалены.");
-                        LoadCustomers();
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show("Ошибка очистки данных в MSSQLLocalDB: " + ex.Message);
-                    }
-                    finally
-                    {
-                        sqlConnection.Close();  // Закрываем соединение после выполнения
-                    }
-                }
+                _customerRepository.DeleteAllCustomers();
+                LoadCustomers();
             }
         }
 
+
+        //private void btnDeleteCustomer_Click(object sender, RoutedEventArgs e)
+        //{
+        //    if (dataGridCustomers.SelectedItem is Customer selectedCustomer)
+        //    {
+        //        if (MessageBox.Show("Удалить клиента?", "Подтверждение", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+        //        {
+        //            DeleteCustomer(selectedCustomer.ID);
+        //        }
+        //    }
+        //    else
+        //    {
+        //        MessageBox.Show("Выберите клиента.");
+        //    }
+        //}
+
         private void btnDeleteCustomer_Click(object sender, RoutedEventArgs e)
         {
-            if (dataGridCustomers.SelectedItem != null)
+            if (dataGridCustomers.SelectedItem is Customer selectedCustomer)
             {
-                Customer selectedCustomer = (Customer)dataGridCustomers.SelectedItem;
-
-                int id = selectedCustomer.ID;
-
-                MessageBoxResult result = MessageBox.Show("Вы уверены, что хотите удалить выбранного клиента?", "Подтверждение", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                if (result == MessageBoxResult.Yes)
-                {
-                    using (SqlConnection sqlConnection = new SqlConnection(sqlConnectionString))
-                    {
-                        try
-                        {
-                            sqlConnection.Open();
-                            string query = "DELETE FROM Customers WHERE ID = @ID";
-                            SqlCommand command = new SqlCommand(query, sqlConnection);
-                            command.Parameters.AddWithValue("@ID", id);
-                            command.ExecuteNonQuery();
-
-                            MessageBox.Show("Клиент успешно удален.");
-                            LoadCustomers();  // Обновляем список клиентов после удаления
-                            dataGridPurchases.ItemsSource = null;  // Очистить покупки после удаления клиента
-                        }
-                        catch (Exception ex)
-                        {
-                            MessageBox.Show("Ошибка удаления клиента: " + ex.Message);
-                        }
-                        finally
-                        {
-                            sqlConnection.Close();  // Закрываем соединение после выполнения
-                        }
-                    }
-                }
+                _customerRepository.DeleteCustomer(selectedCustomer.ID);
+                LoadCustomers();
             }
             else
             {
-                MessageBox.Show("Пожалуйста, выберите клиента для удаления.");
+                MessageBox.Show("Выберите клиента.");
             }
         }
     }
